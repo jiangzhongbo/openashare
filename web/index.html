@@ -349,6 +349,7 @@
             <h2>
               ${combo.label}
               <span class="count-badge" id="count-${combo.id}">-</span>
+              <span class="data-date" id="date-${combo.id}" style="font-size: 14px; color: #666; margin-left: 12px; font-weight: normal;"></span>
             </h2>
             <p class="description">${combo.description}</p>
           </div>
@@ -589,6 +590,7 @@
     async function loadCombinationData(combinationId) {
       const loading = document.getElementById(`loading-${combinationId}`);
       const countEl = document.getElementById(`count-${combinationId}`);
+      const dateEl = document.getElementById(`date-${combinationId}`);
 
       try {
         const data = await fetchData(combinationId);
@@ -598,6 +600,10 @@
           sortAsc: true,
         };
         countEl.textContent = data.length;
+        // 显示数据日期
+        if (data.length > 0 && data[0].run_date) {
+          dateEl.textContent = data[0].run_date;
+        }
         renderTable(combinationId);
       } catch (err) {
         loading.className = 'error';
@@ -635,7 +641,7 @@
         if (firstData?.run_date) {
           document.getElementById('runInfo').textContent = `最新数据：${firstData.run_date}`;
         } else {
-          document.getElementById('runInfo').textContent = `最后更新: ${new Date().toLocaleString('zh-CN')}`;
+          document.getElementById('runInfo').textContent = `最后更新: ${new Date().toLocaleDateString('zh-CN')}`;
         }
       } catch (err) {
         document.getElementById('tabsContainer').innerHTML = `<div class="error">加载失败: ${err.message}</div>`;
