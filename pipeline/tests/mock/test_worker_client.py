@@ -141,10 +141,18 @@ class TestWorkerClientHealthCheck:
 class TestWorkerClientConfig:
     """测试配置"""
 
+    @patch.dict("os.environ", {"WORKER_URL": "", "WORKER_WRITE_TOKEN": ""}, clear=False)
     def test_default_url(self):
-        """默认 URL"""
-        client = WorkerClient()
-        assert client.base_url == "http://localhost:8787"
+        """默认 URL（清除环境变量后测试）"""
+        # 需要清除环境变量才能测试默认值
+        import os
+        old_url = os.environ.pop("WORKER_URL", None)
+        try:
+            client = WorkerClient()
+            assert client.base_url == "http://localhost:8787"
+        finally:
+            if old_url is not None:
+                os.environ["WORKER_URL"] = old_url
 
     @patch.dict("os.environ", {"WORKER_URL": "https://worker.example.com"})
     def test_url_from_env(self):

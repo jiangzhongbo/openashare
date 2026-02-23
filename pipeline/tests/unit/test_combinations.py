@@ -134,19 +134,14 @@ class TestCombinationHelpers:
 class TestRegistry:
     """测试注册表"""
 
-    def test_get_combination_watch(self):
-        """获取 watch 组合"""
-        combination = get_combination("watch")
-        assert combination.id == "watch"
-        assert combination.label == "值得关注"
-        assert len(combination.factors) > 0
-
-    def test_get_combination_buy(self):
-        """获取 buy 组合"""
-        combination = get_combination("buy")
-        assert combination.id == "buy"
-        assert combination.label == "推荐购买"
-        assert len(combination.factors) > 0
+    def test_get_combination_ma60_bounce_uptrend(self):
+        """获取 ma60_bounce_uptrend 组合"""
+        combination = get_combination("ma60_bounce_uptrend")
+        assert combination.id == "ma60_bounce_uptrend"
+        assert combination.label == "MA60支撑反弹+趋势向上"
+        assert len(combination.factors) == 2
+        assert "ma60_bounce_volume" in combination.factors
+        assert "ma60_recent_uptrend" in combination.factors
 
     def test_get_unknown_combination(self):
         """获取未知组合应抛异常"""
@@ -156,15 +151,15 @@ class TestRegistry:
     def test_all_combinations_exist(self):
         """所有组合都应存在"""
         combinations = get_all_combinations()
-        assert len(combinations) == 2
+        assert len(combinations) >= 1
         ids = [c.id for c in combinations]
-        assert "watch" in ids
-        assert "buy" in ids
+        assert "ma60_bounce_uptrend" in ids
 
     def test_required_factors(self):
         """获取所需因子列表"""
         required = get_required_factors()
         assert len(required) > 0
-        # 至少包含 watch 组合的因子
-        assert "ma60_monotonic" in required
+        # 包含 ma60_bounce_uptrend 组合的因子
+        assert "ma60_bounce_volume" in required
+        assert "ma60_recent_uptrend" in required
 
