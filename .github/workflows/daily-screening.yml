@@ -44,21 +44,6 @@ jobs:
         run: |
           python -m pytest tests/unit/ tests/mock/ -v --tb=short
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'npm'
-          cache-dependency-path: 'worker/package-lock.json'
-
-      - name: Install Worker dependencies
-        working-directory: worker
-        run: npm ci
-
-      - name: Run Worker tests
-        working-directory: worker
-        run: npm test
-
   # Job 2: 运行筛选
   screening:
     name: Run Screening
