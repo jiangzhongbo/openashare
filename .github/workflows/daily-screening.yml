@@ -33,30 +33,30 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
-          cache-dependency-path: 'openashare/pipeline/requirements.txt'
-      
+          cache-dependency-path: 'pipeline/requirements.txt'
+
       - name: Install dependencies
-        working-directory: openashare/pipeline
+        working-directory: pipeline
         run: pip install -r requirements.txt
-      
+
       - name: Run Python tests (Layer 1 + Layer 2)
-        working-directory: openashare/pipeline
+        working-directory: pipeline
         run: |
           python -m pytest tests/unit/ tests/mock/ -v --tb=short
-      
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: 'npm'
-          cache-dependency-path: 'openashare/worker/package-lock.json'
-      
+          cache-dependency-path: 'worker/package-lock.json'
+
       - name: Install Worker dependencies
-        working-directory: openashare/worker
+        working-directory: worker
         run: npm ci
-      
+
       - name: Run Worker tests
-        working-directory: openashare/worker
+        working-directory: worker
         run: npm test
 
   # Job 2: 运行筛选
@@ -74,35 +74,35 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
-          cache-dependency-path: 'openashare/pipeline/requirements.txt'
-      
+          cache-dependency-path: 'pipeline/requirements.txt'
+
       - name: Install dependencies
-        working-directory: openashare/pipeline
+        working-directory: pipeline
         run: pip install -r requirements.txt
-      
+
       # 缓存本地 SQLite 数据库
       - name: Cache SQLite database
         uses: actions/cache@v4
         with:
-          path: openashare/pipeline/data/kline.db
+          path: pipeline/data/kline.db
           key: kline-db-${{ github.run_number }}
           restore-keys: |
             kline-db-
-      
+
       - name: Run screening
-        working-directory: openashare/pipeline
+        working-directory: pipeline
         run: |
           if [ -n "${{ github.event.inputs.date }}" ]; then
             python main.py --date "${{ github.event.inputs.date }}"
           else
             python main.py
           fi
-      
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: screening-logs
-          path: openashare/pipeline/data/
+          path: pipeline/data/
           retention-days: 7
 

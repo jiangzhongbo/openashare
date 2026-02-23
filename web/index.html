@@ -313,10 +313,8 @@
 
     // 构建东方财富链接
     function buildEMLink(code) {
-      // code 格式: sh.600001 或 sz.000001
-      const [market, num] = code.split('.');
-      const secid = market === 'sh' ? `1.${num}` : `0.${num}`;
-      return `https://quote.eastmoney.com/${market}${num}.html`;
+      // code 格式: 300132 (纯数字)
+      return `https://quote.eastmoney.com/redirect.html?code=${code}`;
     }
 
     // 格式化数值

@@ -73,22 +73,41 @@ https://ashare-screener.your-subdomain.workers.dev
 ```javascript
 const API_BASE = window.location.hostname === 'localhost' || window.location.protocol === 'file:'
   ? 'http://localhost:8787'
-  : 'https://ashare-screener.your-subdomain.workers.dev';  // 改为你的 Worker URL
+  : 'https://ashare.aigc.it';  // 改为你的 Worker URL
 ```
 
 #### 2.2 通过 Cloudflare Dashboard 部署
-1. 登录 [Cloudflare Dashboard](https://dash.cloudflare.com/)
-2. 进入 **Pages** → **Create a project**
-3. 选择 **Connect to Git** → 选择你的 GitHub 仓库
-4. 配置构建设置：
-   - **Build command**: 留空（纯静态）
-   - **Build output directory**: `web`
-   - **Root directory**: `openashare`
-5. 点击 **Save and Deploy**
 
-记录 Pages URL，例如：
+**通过 Cloudflare Pages 部署前端**
+
+1. 登录 [Cloudflare Dashboard](https://dash.cloudflare.com/)
+2. 进入 **Workers & Pages** → **Create** → **Pages** → **Connect to Git**
+3. 选择你的 GitHub 仓库
+4. 配置构建设置：
+
+| 字段 | 填写内容 |
+|------|---------|
+| 项目名称 | `openashare-web`（或自定义） |
+| 构建命令 | 留空（纯静态，无需构建） |
+| 构建输出目录 | `web` |
+| 根目录 | `openashare` |
+
+5. 点击 **保存并部署**
+
+> **注意**：根目录填 `openashare`，构建输出目录填 `web`，这样 Cloudflare 会部署 `openashare/web/` 目录下的静态文件。
+
+**通过命令行部署前端**
+
+```bash
+cd openashare
+npx wrangler pages deploy web --project-name=openashare-web
 ```
-https://ashare-screener.pages.dev
+
+首次运行会提示创建项目，选择 `Create a new project` 即可。
+
+部署完成后，前端地址：
+```
+https://asweb.aigc.it
 ```
 
 ---
@@ -129,7 +148,7 @@ function jsonResponse(data: unknown, status = 200): Response {
     status,
     headers: {
       'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': 'https://ashare-screener.pages.dev',  // 你的 Pages URL
+      'Access-Control-Allow-Origin': 'https://asweb.aigc.it',  // 前端 URL
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     },
@@ -156,7 +175,7 @@ curl https://ashare-screener.your-subdomain.workers.dev/api/screening/latest
 ```
 
 ### 2. 验证前端
-访问 `https://ashare-screener.pages.dev`，应该能看到：
+访问 `https://asweb.aigc.it`，应该能看到：
 - 组合 Tab（MA60支撑反弹+趋势向上）
 - 筛选结果表格
 - 历史记录区域
