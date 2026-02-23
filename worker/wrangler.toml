@@ -1,0 +1,19 @@
+name = "ashare-screener"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+
+# D1 数据库绑定
+[[d1_databases]]
+binding = "DB"
+database_name = "ashare-screener-db"
+database_id = "6fcf54c6-0aca-43e1-85e0-39c76191a8cc"
+
+# 环境变量（本地开发用，生产环境通过 wrangler secret put WORKER_WRITE_TOKEN 设置）
+[vars]
+ENVIRONMENT = "development"
+WORKER_WRITE_TOKEN = "test-token-local"
+
+# 生产环境配置
+[env.production]
+vars = { ENVIRONMENT = "production" }
+WORKER_WRITE_TOKEN = "test-token-local"

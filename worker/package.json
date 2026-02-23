@@ -1,0 +1,24 @@
+{
+  "name": "ashare-screener-worker",
+  "version": "1.0.0",
+  "description": "A股选股工具 Cloudflare Worker API",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "vitest run"
+  },
+  "keywords": [
+    "cloudflare",
+    "worker",
+    "ashare",
+    "stock-screener"
+  ],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260302.0",
+    "typescript": "^5.9.3",
+    "wrangler": "^4.67.0"
+  }
+}

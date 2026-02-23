@@ -1,0 +1,108 @@
+name: Daily Stock Screening
+
+on:
+  # 每个交易日 16:30 北京时间 (UTC+8) = 08:30 UTC
+  schedule:
+    - cron: '30 8 * * 1-5'  # 周一到周五
+  
+  # 手动触发
+  workflow_dispatch:
+    inputs:
+      date:
+        description: '运行日期 (YYYY-MM-DD)'
+        required: false
+        type: string
+
+env:
+  PYTHON_VERSION: '3.12'
+  WORKER_URL: ${{ secrets.WORKER_URL }}
+  WORKER_WRITE_TOKEN: ${{ secrets.WORKER_WRITE_TOKEN }}
+
+jobs:
+  # Job 1: 运行测试
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: 'openashare/pipeline/requirements.txt'
+      
+      - name: Install dependencies
+        working-directory: openashare/pipeline
+        run: pip install -r requirements.txt
+      
+      - name: Run Python tests (Layer 1 + Layer 2)
+        working-directory: openashare/pipeline
+        run: |
+          python -m pytest tests/unit/ tests/mock/ -v --tb=short
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: 'openashare/worker/package-lock.json'
+      
+      - name: Install Worker dependencies
+        working-directory: openashare/worker
+        run: npm ci
+      
+      - name: Run Worker tests
+        working-directory: openashare/worker
+        run: npm test
+
+  # Job 2: 运行筛选
+  screening:
+    name: Run Screening
+    runs-on: ubuntu-latest
+    needs: test  # 测试通过后才运行
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: 'openashare/pipeline/requirements.txt'
+      
+      - name: Install dependencies
+        working-directory: openashare/pipeline
+        run: pip install -r requirements.txt
+      
+      # 缓存本地 SQLite 数据库
+      - name: Cache SQLite database
+        uses: actions/cache@v4
+        with:
+          path: openashare/pipeline/data/kline.db
+          key: kline-db-${{ github.run_number }}
+          restore-keys: |
+            kline-db-
+      
+      - name: Run screening
+        working-directory: openashare/pipeline
+        run: |
+          if [ -n "${{ github.event.inputs.date }}" ]; then
+            python main.py --date "${{ github.event.inputs.date }}"
+          else
+            python main.py
+          fi
+      
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screening-logs
+          path: openashare/pipeline/data/
+          retention-days: 7
+
