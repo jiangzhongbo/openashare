@@ -1,7 +1,7 @@
 # A股选股工具 Python 依赖
 
 # 数据获取
-baostock==0.8.8
+baostock>=0.8.9
 akshare>=1.10.0
 
 # 数据处理

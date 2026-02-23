@@ -15,8 +15,8 @@ on:
 
 env:
   PYTHON_VERSION: '3.12'
-  WORKER_URL: ${{ secrets.WORKER_URL }}
-  WORKER_WRITE_TOKEN: ${{ secrets.WORKER_WRITE_TOKEN }}
+  WORKER_URL: 'https://ashare.aigc.it'
+  WORKER_WRITE_TOKEN: 'test-token-local'
 
 jobs:
   # Job 1: 运行测试
