@@ -1,0 +1,1 @@
+npx wrangler pages deploy web --project-name=openashare-web
