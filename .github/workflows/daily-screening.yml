@@ -67,12 +67,28 @@ jobs:
 
       # 缓存本地 SQLite 数据库
       - name: Cache SQLite database
+        id: cache-db
         uses: actions/cache@v4
         with:
           path: pipeline/data/kline.db
           key: kline-db-${{ github.run_number }}
           restore-keys: |
             kline-db-
+
+      # 如果没有缓存，从 Release 下载初始数据
+      - name: Download initial database from Release
+        if: steps.cache-db.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p pipeline/data
+          # 尝试从最新 release 下载 kline.db
+          DOWNLOAD_URL=$(curl -s https://api.github.com/repos/${{ github.repository }}/releases/latest | grep "browser_download_url.*kline.db" | cut -d '"' -f 4)
+          if [ -n "$DOWNLOAD_URL" ]; then
+            echo "从 Release 下载初始数据库..."
+            curl -L -o pipeline/data/kline.db "$DOWNLOAD_URL"
+            echo "下载完成: $(ls -lh pipeline/data/kline.db)"
+          else
+            echo "未找到 Release 中的 kline.db，将从头下载数据"
+          fi
 
       - name: Run screening
         working-directory: pipeline
