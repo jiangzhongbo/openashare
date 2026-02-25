@@ -19,8 +19,21 @@ class Combination:
     id: str  # 组合 ID，如 "ma60_bounce_uptrend"
     label: str  # 组合名称，如 "MA60支撑反弹+趋势向上"
     description: str = ""  # 组合描述，用于前端展示
+    entry_rule: str = ""  # 买入点描述
+    exit_rule: str = ""  # 卖出点描述
     factors: List[str] = field(default_factory=list)  # 因子 ID 列表
     
+    def to_dict(self) -> Dict[str, object]:
+        """序列化为前端需要的格式"""
+        return {
+            "id": self.id,
+            "label": self.label,
+            "description": self.description,
+            "entry_rule": self.entry_rule,
+            "exit_rule": self.exit_rule,
+            "factors": self.factors,
+        }
+
     def evaluate(self, factor_results: Dict[str, "FactorResult"]) -> bool:
         """
         评估股票是否通过该组合

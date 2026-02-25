@@ -19,6 +19,7 @@ from .turnover import TurnoverFactor
 from .n_day_return import NDayReturnFactor
 from .ma60_bounce_with_volume import MA60BounceWithVolumeFactor
 from .ma60_recent_uptrend import MA60RecentUptrendFactor
+from .signal_quality_filter import SignalQualityFilterFactor
 
 
 # ============================================================
@@ -35,6 +36,7 @@ FACTORS: List[Factor] = [
     NDayReturnFactor(),
     MA60BounceWithVolumeFactor(),
     MA60RecentUptrendFactor(),
+    SignalQualityFilterFactor(),
 ]
 
 # 因子 ID -> 因子实例 的映射
@@ -49,10 +51,13 @@ COMBINATIONS: List[Combination] = [
     Combination(
         id="ma60_bounce_uptrend",
         label="MA60支撑反弹+趋势向上",
-        description="捕捉跌破MA60支撑后的强力反弹信号，同时确保MA60处于上升趋势中。适合短线交易，后续在阴线时择机进入。",
+        description="跌破MA60后强力反弹+趋势向上+信号质量过滤（跌破≤5天、量比5d≥1.5、换手率5~12%）。10%止盈、15天最大持仓、5天入场窗口。",
+        entry_rule="信号日出现阴线时买入（5天入场窗口）。条件：跌破MA60后反弹涨幅≥5%、量比5d≥1.5、换手率5~12%、跌破天数≤5天、MA60近10日持续上升",
+        exit_rule="止盈：涨幅达10%卖出 | 最大持仓：15个交易日强制卖出",
         factors=[
             "ma60_bounce_volume",      # MA60 支撑反弹因子
             "ma60_recent_uptrend",     # MA60 近期上升趋势（10天）
+            "signal_quality_filter",   # 信号质量过滤
         ],
     ),
 ]

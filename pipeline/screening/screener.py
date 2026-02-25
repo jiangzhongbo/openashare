@@ -53,13 +53,15 @@ class ScreeningReport:
     total_stocks: int
     results: List[ScreeningResult]
     duration_seconds: float
-    
+
     # 按组合统计通过数
     combination_counts: Dict[str, int] = field(default_factory=dict)
-    
+    # 组合元数据（用于同步到 Worker）
+    combinations: List[Combination] = field(default_factory=list)
+
     def to_ingest_payload(self) -> Dict[str, Any]:
         """转换为 Worker /api/ingest 的 payload 格式"""
-        return {
+        payload: Dict[str, Any] = {
             "run_date": self.run_date,
             "results": [
                 {
@@ -79,6 +81,9 @@ class ScreeningReport:
                 "status": "success",
             },
         }
+        if self.combinations:
+            payload["combinations"] = [c.to_dict() for c in self.combinations]
+        return payload
 
 
 class Screener:
@@ -217,5 +222,6 @@ class Screener:
             results=all_results,
             duration_seconds=round(duration, 2),
             combination_counts=combination_counts,
+            combinations=self.combinations,
         )
 

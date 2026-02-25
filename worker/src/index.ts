@@ -44,14 +44,34 @@ export default {
     }
 
     try {
-      // GET /api/combinations - 获取所有组合的元数据
+      // GET /api/combinations - 获取所有组合的元数据（从 DB 读取，fallback 到硬编码）
       if (method === 'GET' && path === '/api/combinations') {
+        try {
+          const dbResult = await env.DB.prepare('SELECT * FROM combinations ORDER BY id').all();
+          if (dbResult.results && dbResult.results.length > 0) {
+            const combinations = dbResult.results.map((row: any) => ({
+              id: row.id,
+              label: row.label,
+              description: row.description,
+              entry_rule: row.entry_rule,
+              exit_rule: row.exit_rule,
+              factors: JSON.parse(row.factors || '[]'),
+            }));
+            return jsonResponse({ combinations });
+          }
+        } catch {
+          // combinations 表可能不存在，fallback 到硬编码
+        }
+
+        // Fallback：表为空或不存在时使用硬编码
         const combinations = [
           {
             id: 'ma60_bounce_uptrend',
             label: 'MA60支撑反弹+趋势向上',
-            description: '捕捉跌破MA60支撑后的强力反弹信号，同时确保MA60处于上升趋势中。适合短线交易，后续在阴线时择机进入。',
-            factors: ['ma60_bounce_volume', 'ma60_recent_uptrend'],
+            description: '跌破MA60后强力反弹+趋势向上+信号质量过滤',
+            entry_rule: '信号日出现阴线时买入（5天入场窗口）。条件：跌破MA60后反弹涨幅≥5%、量比5d≥1.5、换手率5~12%、跌破天数≤5天、MA60近10日持续上升',
+            exit_rule: '止盈：涨幅达10%卖出 | 最大持仓：15个交易日强制卖出',
+            factors: ['ma60_bounce_volume', 'ma60_recent_uptrend', 'signal_quality_filter'],
           },
         ];
         return jsonResponse({ combinations });
@@ -133,6 +153,7 @@ export default {
           run_date?: string;
           results?: unknown[];
           run_log?: unknown;
+          combinations?: unknown[];
         };
 
         const runDate = body.run_date;
@@ -168,9 +189,9 @@ export default {
               n(r.code),
               n(r.name),
               n(r.latest_price),
-              n(r.factor_ma60_monotonic ?? r.ma60_change_pct),
-              n(r.ma60_angle),
-              n(r.factor_ma20_consolidation ?? r.ma20_change_pct),
+              n(r.factor_ma60_bounce_volume ?? r.ma60_change_pct),
+              n(r.factor_ma60_recent_uptrend ?? r.ma60_angle),
+              n(r.factor_signal_quality_filter ?? r.ma20_change_pct),
               n(r.factor_ma_distance ?? r.ma_distance),
               n(r.factor_macd_golden_cross ?? r.macd_days_ago),
               n(r.factor_rsi ?? r.rsi),
@@ -181,6 +202,26 @@ export default {
               new Date().toISOString()
             ).run();
             insertedCount++;
+          }
+        }
+
+        // 写入组合元数据
+        if (body.combinations && Array.isArray(body.combinations)) {
+          for (const combo of body.combinations) {
+            const c = combo as Record<string, unknown>;
+            const n = (v: unknown) => (v === undefined ? null : v);
+            await env.DB.prepare(`
+              INSERT OR REPLACE INTO combinations (id, label, description, entry_rule, exit_rule, factors, updated_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?)
+            `).bind(
+              n(c.id),
+              n(c.label),
+              n(c.description),
+              n(c.entry_rule),
+              n(c.exit_rule),
+              JSON.stringify(c.factors || []),
+              new Date().toISOString()
+            ).run();
           }
         }
 
