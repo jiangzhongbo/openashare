@@ -123,3 +123,23 @@ class MA60RecentUptrendFactor(Factor):
                 detail="; ".join(reasons) if reasons else "未通过",
             )
 
+    def scan(self, df: pd.DataFrame) -> pd.Series:
+        """向量化扫描：一次性计算所有行是否通过"""
+        min_days = 60 + self.lookback_days
+        if len(df) < min_days:
+            return pd.Series(False, index=df.index)
+
+        ma60 = df["close"].rolling(window=60).mean()
+
+        # MA60 最近 lookback_days 天严格递增（lookback_days-1 个差分都 > 0）
+        ma60_diff = ma60.diff()
+        strictly_up = (ma60_diff > 0).rolling(self.lookback_days - 1).min() == 1
+
+        # 涨幅 >= min_change
+        ma60_start = ma60.shift(self.lookback_days - 1)
+        change_pct = (ma60 - ma60_start) / ma60_start * 100
+        meets_change = change_pct >= self.min_change
+
+        mask = strictly_up & meets_change
+        return mask.fillna(False)
+

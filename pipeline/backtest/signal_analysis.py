@@ -242,7 +242,7 @@ def print_feature_comparison(features_df: pd.DataFrame):
 def main():
     parser = argparse.ArgumentParser(description="信号特征分析")
     parser.add_argument("--combination", "-c", required=True)
-    parser.add_argument("--db-path", type=str, default="data/kline.db")
+    parser.add_argument("--db-path", type=str, default="pipeline/data/kline.db")
     parser.add_argument("--forward-days", type=int, default=10)
     args = parser.parse_args()
 

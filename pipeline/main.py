@@ -89,43 +89,67 @@ def main():
 
         # 3b. 查询 DB 中每只股票已有的最新日期（一次查询）
         latest_dates = db.get_all_stocks_latest_date()
+        target_dt = datetime.strptime(target_date, "%Y-%m-%d")
 
-        # 3b-2. 检查有多少股票已经是最新日期
-        up_to_date_count = sum(1 for date in latest_dates.values() if date >= target_date)
-        total_in_db = len(latest_dates)
-        logger.info(f"本地数据库状态: {up_to_date_count}/{total_in_db} 只股票已是最新 ({target_date})")
+        # 3b-2. 预分类：统计各类股票数量
+        STALE_THRESHOLD = 30  # 超过 30 天未更新视为停牌/退市，跳过
+        stock_codes = set(row.code for row in stocks.itertuples(index=False))
+        up_to_date = []   # 已是最新
+        need_update = []  # 正常增量（gap <= 30天）
+        stale = []        # 停牌/退市（gap > 30天）
+        not_in_db = []    # 不在 DB 中（新股/从未下载）
 
-        # 如果超过 95% 的股票都是最新的，跳过下载
-        if total_in_db > 0 and up_to_date_count / total_in_db > 0.95:
-            logger.info(f"本地数据已基本最新（{up_to_date_count}/{total_in_db} = {up_to_date_count/total_in_db*100:.1f}%），跳过下载步骤")
-            stats = {"skipped": len(stocks), "incremental": 0, "full": 0, "failed": 0}
-            logger.info(
-                f"下载完成 — 跳过: {stats['skipped']}  增量: {stats['incremental']}  "
-                f"全量: {stats['full']}  失败: {stats['failed']}"
-            )
+        for code in stock_codes:
+            latest = latest_dates.get(code)
+            if latest is None:
+                not_in_db.append(code)
+            elif latest >= target_date:
+                up_to_date.append(code)
+            else:
+                gap = (target_dt - datetime.strptime(latest, "%Y-%m-%d")).days
+                if gap > STALE_THRESHOLD:
+                    stale.append((code, latest, gap))
+                else:
+                    need_update.append((code, latest, gap))
+
+        # 打印数据库统计报告
+        logger.info(f"{'='*60}")
+        logger.info(f"数据库统计报告（目标日期: {target_date}）")
+        logger.info(f"{'='*60}")
+        logger.info(f"  股票列表总数:   {len(stock_codes)}")
+        logger.info(f"  已是最新:       {len(up_to_date)} 只（无需下载）")
+        logger.info(f"  正常增量:       {len(need_update)} 只（gap ≤ {STALE_THRESHOLD}天）")
+        logger.info(f"  停牌/退市:      {len(stale)} 只（gap > {STALE_THRESHOLD}天，跳过）")
+        logger.info(f"  不在DB中:       {len(not_in_db)} 只（全量下载）")
+        logger.info(f"  需要下载:       {len(need_update) + len(not_in_db)} 只")
+        logger.info(f"{'='*60}")
+
+        # 如果没有需要下载的，直接跳过
+        total_to_fetch = len(need_update) + len(not_in_db)
+        if total_to_fetch == 0:
+            logger.info("所有股票已是最新或为停牌股，跳过下载步骤")
+            stats = {"skipped": len(up_to_date), "incremental": 0, "full": 0, "stale_skipped": len(stale), "failed": 0}
         else:
-            # 需要下载
+            # 构建下载任务列表（只包含需要下载的股票）
             full_start_date = (datetime.now() - timedelta(days=400)).strftime("%Y-%m-%d")
-            stats = {"skipped": 0, "incremental": 0, "full": 0, "failed": 0}
+            stats = {"skipped": len(up_to_date), "incremental": 0, "full": 0, "stale_skipped": len(stale), "failed": 0}
 
-            # 3c. 遍历所有股票，带 tqdm 进度条
-            for row in tqdm(stocks.itertuples(index=False), total=len(stocks), desc="下载K线"):
-                code = row.code
-                latest = latest_dates.get(code)
+            # 构建任务：(code, start_date, label)
+            tasks = []
+            for code, latest, gap in need_update:
+                start = (datetime.strptime(latest, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
+                tasks.append((code, start, f"增量{gap}天"))
+            for code in not_in_db:
+                tasks.append((code, full_start_date, "全量"))
 
-                if latest is not None and latest >= target_date:
-                    # 已是最新，跳过
-                    stats["skipped"] += 1
-                    continue
-                elif latest is not None:
-                    # 有数据但不是最新，只补缺口
-                    start = (
-                        datetime.strptime(latest, "%Y-%m-%d") + timedelta(days=1)
-                    ).strftime("%Y-%m-%d")
+            # 3c. 遍历需要下载的股票，带 tqdm 进度条
+            pbar = tqdm(tasks, total=len(tasks), desc="下载K线")
+            for code, start, label in pbar:
+                pbar.set_postfix_str(f"{code} {label}")
+
+                if "增量" in label:
                     stats["incremental"] += 1
                 else:
-                    # 完全没有数据，全量下载
-                    start = full_start_date
                     stats["full"] += 1
 
                 try:
@@ -138,10 +162,10 @@ def main():
                     logger.warning(f"下载失败 {code}: {e}")
                     stats["failed"] += 1
 
-            logger.info(
-                f"下载完成 — 跳过: {stats['skipped']}  增量: {stats['incremental']}  "
-                f"全量: {stats['full']}  失败: {stats['failed']}"
-            )
+        logger.info(
+            f"下载完成 — 已最新: {stats['skipped']}  增量: {stats['incremental']}  "
+            f"全量: {stats['full']}  停牌跳过: {stats['stale_skipped']}  失败: {stats['failed']}"
+        )
 
         # 4. 清理旧数据
         logger.info("清理旧数据（保留 250 天）...")
@@ -187,7 +211,8 @@ def main():
                 for r in report.results:
                     logger.info(f"\n股票: {r.code} | 组合: {r.combination}")
                     for fid, value in r.factor_values.items():
-                        factor_label = FACTOR_MAP.get(fid, {}).get("label", fid)
+                        factor = FACTOR_MAP.get(fid)
+                        factor_label = factor.label if factor else fid
                         logger.info(f"  - {factor_label}: {value}")
                 logger.info(f"\n{'='*60}")
             else:
@@ -212,6 +237,8 @@ def main():
     except Exception as e:
         logger.exception(f"运行失败: {e}")
         sys.exit(1)
+    finally:
+        fetcher.logout()
 
 
 if __name__ == "__main__":

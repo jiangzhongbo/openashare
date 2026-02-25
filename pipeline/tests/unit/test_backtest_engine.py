@@ -17,6 +17,9 @@ class AlwaysPassFactor(Factor):
     def compute(self, df: pd.DataFrame) -> FactorResult:
         return FactorResult(passed=True, value=1.0)
 
+    def scan(self, df: pd.DataFrame) -> pd.Series:
+        return pd.Series(True, index=df.index)
+
 
 class NeverPassFactor(Factor):
     """测试用因子：永远不通过"""
@@ -25,6 +28,9 @@ class NeverPassFactor(Factor):
 
     def compute(self, df: pd.DataFrame) -> FactorResult:
         return FactorResult(passed=False)
+
+    def scan(self, df: pd.DataFrame) -> pd.Series:
+        return pd.Series(False, index=df.index)
 
 
 class PassOnDatesFactor(Factor):
@@ -36,6 +42,9 @@ class PassOnDatesFactor(Factor):
     def compute(self, df: pd.DataFrame) -> FactorResult:
         last_date = df.iloc[-1]["date"]
         return FactorResult(passed=last_date in self.pass_dates, value=1.0)
+
+    def scan(self, df: pd.DataFrame) -> pd.Series:
+        return df["date"].isin(self.pass_dates)
 
 
 def make_stock_data(days=100, start_price=10.0, bearish_every=5):

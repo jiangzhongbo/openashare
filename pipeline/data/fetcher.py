@@ -40,11 +40,12 @@ class BaoStockFetcher:
         except Exception as e:
             logger.error(f"BaoStock 登录异常: {e}")
 
-    def __del__(self):
-        """登出 BaoStock"""
+    def logout(self):
+        """主动登出 BaoStock（仅在程序结束时手动调用）"""
         if self.logged_in:
             try:
                 bs.logout()
+                self.logged_in = False
             except Exception:
                 pass
 
@@ -85,14 +86,28 @@ class BaoStockFetcher:
             # 标准化列名
             df["code"] = df["code"].str.replace("sh.", "", regex=False).str.replace("sz.", "", regex=False)
             df["name"] = df["code_name"]
-            df["bs_code"] = df["code_name"].index.map(lambda i: data_list[i][0] if i < len(data_list) else "")
-            # 重新获取 bs_code
             df["bs_code"] = df.apply(
                 lambda row: f"sh.{row['code']}" if row["code"].startswith("6") else f"sz.{row['code']}",
                 axis=1,
             )
 
-            logger.info(f"成功获取股票列表，共 {len(df)} 只股票")
+            total_before = len(df)
+
+            # 过滤退市股（status=0）
+            if "status" in df.columns:
+                delisted = df[df["status"] == "0"]
+                if len(delisted) > 0:
+                    logger.info(f"过滤退市股: {len(delisted)} 只")
+                df = df[df["status"] == "1"]
+
+            # 过滤北交所（代码以 4/8 开头，BaoStock 不支持）
+            bj_mask = df["code"].str.startswith("4") | df["code"].str.startswith("8")
+            bj_count = bj_mask.sum()
+            if bj_count > 0:
+                logger.info(f"过滤北交所: {bj_count} 只（BaoStock 不支持）")
+            df = df[~bj_mask]
+
+            logger.info(f"成功获取股票列表，共 {len(df)} 只（原始 {total_before}，过滤 {total_before - len(df)}）")
             return df[["code", "name", "bs_code"]]
 
         except Exception as e:

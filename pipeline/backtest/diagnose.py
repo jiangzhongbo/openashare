@@ -349,10 +349,203 @@ def analyze_exit_strategy(
     print()
 
 
+def analyze_signal_exits(
+    signals: Dict[str, List[Tuple[str, str]]],
+    stock_data: Dict[str, pd.DataFrame],
+):
+    """
+    分析各种信号型退出策略
+
+    对比：MA均线族、移动止损、缩量退出、首根阴线退出等
+    """
+    print()
+    print("=" * 70)
+    print("  诊断 4：信号型退出策略全面对比（持有至数据结束）")
+    print("=" * 70)
+
+    MAX_HOLD = 9999  # 不限持有天数，直到数据结束
+
+    indexed: Dict[str, pd.DataFrame] = {}
+    for code, df in stock_data.items():
+        df = df.sort_values("date").reset_index(drop=True)
+        df["ma5"] = calculate_ma(df, 5)
+        df["ma10"] = calculate_ma(df, 10)
+        df["ma20"] = calculate_ma(df, 20)
+        df["ma60"] = calculate_ma(df, 60)
+        # 5日均量
+        df["vol_ma5"] = df["volume"].rolling(5).mean()
+        indexed[code] = df
+
+    # 收集入场点（阴线入场）
+    entries = []
+    for date, stocks in signals.items():
+        for code, name in stocks:
+            if code not in indexed:
+                continue
+            df = indexed[code]
+            dates_list = df["date"].tolist()
+            if date not in dates_list:
+                continue
+            idx = dates_list.index(date)
+            # 5天窗口找阴线
+            for offset in range(1, 6):
+                entry_idx = idx + offset
+                if entry_idx >= len(df):
+                    break
+                row = df.iloc[entry_idx]
+                if row["close"] < row["open"]:
+                    entry_price = float(row["close"])
+                    if entry_price > 0:
+                        entries.append((code, entry_idx, entry_price))
+                    break
+
+    def run_exit_strategy(name, exit_fn):
+        """通用退出策略测试框架"""
+        returns = []
+        hold_days_list = []
+        for code, entry_idx, entry_price in entries:
+            df = indexed[code]
+            peak = entry_price
+            for offset in range(1, MAX_HOLD + 1):
+                exit_idx = entry_idx + offset
+                if exit_idx >= len(df):
+                    break
+                row = df.iloc[exit_idx]
+                close = float(row["close"])
+                peak = max(peak, close)
+                if exit_fn(row, entry_price, peak, offset):
+                    ret = (close - entry_price) / entry_price * 100
+                    returns.append(ret)
+                    hold_days_list.append(offset)
+                    break
+            else:
+                last_idx = min(entry_idx + MAX_HOLD, len(df) - 1)
+                close = float(df.iloc[last_idx]["close"])
+                ret = (close - entry_price) / entry_price * 100
+                returns.append(ret)
+                hold_days_list.append(last_idx - entry_idx)
+        return returns, hold_days_list
+
+    strategies = {}
+
+    # ---- MA 均线族 ----
+    for ma_name, ma_col in [("MA5", "ma5"), ("MA10", "ma10"), ("MA20", "ma20")]:
+        def make_ma_exit(col):
+            def exit_fn(row, entry_price, peak, offset):
+                ma_val = row.get(col)
+                if ma_val is not None and pd.notna(ma_val):
+                    return float(row["close"]) < float(ma_val)
+                return False
+            return exit_fn
+        strategies[f"跌破{ma_name}"] = make_ma_exit(ma_col)
+
+    # ---- 移动止损（从最高点回撤 X%）----
+    for pct in [5, 8, 10, 15]:
+        def make_trailing(p):
+            def exit_fn(row, entry_price, peak, offset):
+                close = float(row["close"])
+                drawdown = (peak - close) / peak * 100 if peak > 0 else 0
+                return drawdown >= p
+            return exit_fn
+        strategies[f"移动止损{pct}%"] = make_trailing(pct)
+
+    # ---- 固定止盈 ----
+    for pct in [10, 15, 20]:
+        def make_tp(p):
+            def exit_fn(row, entry_price, peak, offset):
+                close = float(row["close"])
+                ret = (close - entry_price) / entry_price * 100
+                return ret >= p
+            return exit_fn
+        strategies[f"止盈{pct}%"] = make_tp(pct)
+
+    # ---- 固定止损 ----
+    for pct in [5, 8, 10]:
+        def make_sl(p):
+            def exit_fn(row, entry_price, peak, offset):
+                close = float(row["close"])
+                ret = (close - entry_price) / entry_price * 100
+                return ret <= -p
+            return exit_fn
+        strategies[f"止损{pct}%"] = make_sl(pct)
+
+    # ---- 跌破MA20 + 缩量确认 ----
+    def exit_ma20_vol_shrink(row, entry_price, peak, offset):
+        ma20 = row.get("ma20")
+        vol_ma5 = row.get("vol_ma5")
+        vol = float(row.get("volume", 0) or 0)
+        if ma20 is not None and pd.notna(ma20) and float(row["close"]) < float(ma20):
+            if vol_ma5 is not None and pd.notna(vol_ma5) and vol_ma5 > 0:
+                if vol < float(vol_ma5) * 0.8:
+                    return True
+        return False
+    strategies["跌破MA20+缩量"] = exit_ma20_vol_shrink
+
+    # ---- 移动止损10% + 止盈20% 组合 ----
+    def exit_trailing10_tp20(row, entry_price, peak, offset):
+        close = float(row["close"])
+        ret = (close - entry_price) / entry_price * 100
+        if ret >= 20:
+            return True
+        drawdown = (peak - close) / peak * 100 if peak > 0 else 0
+        if drawdown >= 10:
+            return True
+        return False
+    strategies["移动止损10%+止盈20%"] = exit_trailing10_tp20
+
+    # ---- 移动止损8% + 止盈15% 组合 ----
+    def exit_trailing8_tp15(row, entry_price, peak, offset):
+        close = float(row["close"])
+        ret = (close - entry_price) / entry_price * 100
+        if ret >= 15:
+            return True
+        drawdown = (peak - close) / peak * 100 if peak > 0 else 0
+        if drawdown >= 8:
+            return True
+        return False
+    strategies["移动止损8%+止盈15%"] = exit_trailing8_tp15
+
+    # ---- 跌破MA20 或 移动止损10% ----
+    def exit_ma20_or_trailing10(row, entry_price, peak, offset):
+        close = float(row["close"])
+        ma20 = row.get("ma20")
+        if ma20 is not None and pd.notna(ma20) and close < float(ma20):
+            return True
+        drawdown = (peak - close) / peak * 100 if peak > 0 else 0
+        if drawdown >= 10:
+            return True
+        return False
+    strategies["跌破MA20或移动止损10%"] = exit_ma20_or_trailing10
+
+    # 执行所有策略
+    print(f"\n  阴线入场，持有至信号触发或数据结束:\n")
+    print(f"  {'退出策略':<24}  {'平均收益':>8}  {'中位收益':>8}  {'胜率':>8}  {'平均天数':>8}  {'样本':>5}")
+    print(f"  {'-' * 24}  {'-' * 8}  {'-' * 8}  {'-' * 8}  {'-' * 8}  {'-' * 5}")
+
+    for name, exit_fn in strategies.items():
+        rets, days = run_exit_strategy(name, exit_fn)
+        if not rets:
+            continue
+        arr = np.array(rets)
+        mean_r = np.mean(arr)
+        median_r = np.median(arr)
+        wr = np.sum(arr > 0) / len(arr) * 100
+        avg_days = np.mean(days)
+        sign = "+" if mean_r >= 0 else ""
+        sign_m = "+" if median_r >= 0 else ""
+        print(
+            f"  {name:<24}  {sign}{mean_r:>7.2f}%  {sign_m}{median_r:>7.2f}%  "
+            f"{wr:>7.1f}%  {avg_days:>6.1f}天  {len(arr):>5}"
+        )
+
+    print()
+
+
+
 def main():
     parser = argparse.ArgumentParser(description="回测诊断：分离信号质量 vs 策略影响")
     parser.add_argument("--combination", "-c", required=True)
-    parser.add_argument("--db-path", type=str, default="data/kline.db")
+    parser.add_argument("--db-path", type=str, default="pipeline/data/kline.db")
     parser.add_argument("--start", type=str)
     parser.add_argument("--end", type=str)
     args = parser.parse_args()
@@ -395,10 +588,11 @@ def main():
     signal_days = len(signals)
     logger.info(f"共 {total_signals} 个信号，分布在 {signal_days} 个交易日")
 
-    # 运行三项诊断
-    analyze_signal_quality(signals, stock_data)
-    analyze_entry_strategy(signals, stock_data)
-    analyze_exit_strategy(signals, stock_data)
+    # 运行诊断
+    # analyze_signal_quality(signals, stock_data)
+    # analyze_entry_strategy(signals, stock_data)
+    # analyze_exit_strategy(signals, stock_data)
+    analyze_signal_exits(signals, stock_data)
 
 
 if __name__ == "__main__":

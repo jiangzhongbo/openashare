@@ -46,9 +46,25 @@ def main():
         "--entry-window", type=int, default=5,
         help="等待阴线入场的最大天数（默认 5）",
     )
+    parser.add_argument(
+        "--take-profit", type=float, default=10.0,
+        help="止盈百分比（默认 10%%）",
+    )
+    parser.add_argument(
+        "--stop-loss", type=float, default=0,
+        help="止损百分比（默认 0 不设止损）",
+    )
+    parser.add_argument(
+        "--max-hold", type=int, default=0,
+        help="最大持仓天数（默认 0 不限制）",
+    )
+    parser.add_argument(
+        "--board", type=str, default="all",
+        help="板块过滤: all=全市场, main=主板+创业板, star=科创板 (默认 all)",
+    )
     parser.add_argument("--csv", type=str, help="导出交易明细到 CSV 文件")
     parser.add_argument(
-        "--db-path", type=str, default="data/kline.db",
+        "--db-path", type=str, default="pipeline/data/kline.db",
         help="本地数据库路径",
     )
     args = parser.parse_args()
@@ -71,7 +87,21 @@ def main():
         code: group.reset_index(drop=True)
         for code, group in all_data.groupby("code")
     }
-    logger.info(f"共 {len(stock_data)} 只股票")
+    # 板块过滤
+    if args.board == "main":
+        stock_data = {
+            code: df for code, df in stock_data.items()
+            if code.startswith(("000", "001", "002", "003", "600", "601", "603", "605", "300", "301"))
+        }
+        logger.info(f"过滤后（主板+创业板）: {len(stock_data)} 只股票")
+    elif args.board == "star":
+        stock_data = {
+            code: df for code, df in stock_data.items()
+            if code.startswith("688")
+        }
+        logger.info(f"过滤后（科创板）: {len(stock_data)} 只股票")
+    else:
+        logger.info(f"共 {len(stock_data)} 只股票")
 
     # 创建引擎
     logger.info(f"初始化回测引擎: 组合={args.combination}, 资金={args.capital:,.0f}")
@@ -81,6 +111,9 @@ def main():
         end_date=args.end,
         initial_capital=args.capital,
         entry_window=args.entry_window,
+        take_profit_pct=args.take_profit,
+        stop_loss_pct=args.stop_loss,
+        max_hold_days=args.max_hold,
     )
 
     # 进度条

@@ -139,9 +139,10 @@ class TestRegistry:
         combination = get_combination("ma60_bounce_uptrend")
         assert combination.id == "ma60_bounce_uptrend"
         assert combination.label == "MA60支撑反弹+趋势向上"
-        assert len(combination.factors) == 2
+        assert len(combination.factors) == 3
         assert "ma60_bounce_volume" in combination.factors
         assert "ma60_recent_uptrend" in combination.factors
+        assert "signal_quality_filter" in combination.factors
 
     def test_get_unknown_combination(self):
         """获取未知组合应抛异常"""

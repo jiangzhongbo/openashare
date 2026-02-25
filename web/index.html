@@ -326,13 +326,9 @@
 
     // 因子列名映射
     const FACTOR_LABELS = {
-      ma60_change_pct: 'MA60变化%',
-      ma20_change_pct: 'MA20变化%',
-      ma_distance: 'MA距离%',
-      macd_days_ago: 'MACD金叉',
-      rsi: 'RSI',
-      turnover_avg: '换手率%',
-      n_day_return: 'N日涨幅%',
+      ma60_change_pct: '反弹涨幅%',
+      ma60_angle: 'MA60趋势%',
+      ma20_change_pct: '量比5d',
     };
 
     // 全局状态
@@ -414,6 +410,8 @@
               <span class="data-date" id="date-${combo.id}" style="font-size: 14px; color: #666; margin-left: 12px; font-weight: normal;"></span>
             </h2>
             <p class="description">${combo.description}</p>
+            ${combo.entry_rule ? `<p class="description" style="margin-top:6px;"><strong style="color:#c62828;">买入点：</strong>${combo.entry_rule}</p>` : ''}
+            ${combo.exit_rule ? `<p class="description" style="margin-top:4px;"><strong style="color:#2e7d32;">卖出点：</strong>${combo.exit_rule}</p>` : ''}
           </div>
           <div class="table-container">
             <div class="loading" id="loading-${combo.id}">加载中...</div>

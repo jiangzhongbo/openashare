@@ -152,3 +152,31 @@ class MA60BounceWithVolumeFactor(Factor):
                 detail="; ".join(reasons) if reasons else "未通过",
             )
 
+    def scan(self, df: pd.DataFrame) -> pd.Series:
+        """向量化扫描：一次性计算所有行是否通过"""
+        min_days = 60 + self.lookback_days + 1
+        if len(df) < min_days:
+            return pd.Series(False, index=df.index)
+
+        ma60 = df["close"].rolling(window=60).mean()
+
+        # 条件0: 前 lookback_days 天内至少有一天在 MA60 上方
+        above = (df["close"] > ma60).astype(float)
+        was_above = above.shift(2).rolling(self.lookback_days, min_periods=1).max() >= 1
+
+        # 条件1: 前一天跌破 MA60
+        cond1 = df["close"].shift(1) < ma60.shift(1)
+
+        # 条件2: 当天站上 MA60
+        cond2 = df["close"] > ma60
+
+        # 条件3: 涨幅 > min_gain
+        cond3 = df["pct_chg"] > self.min_gain
+
+        # 条件4: 成交量放大（避免除以 0）
+        vol_yesterday = df["volume"].shift(1).replace(0, float("nan"))
+        cond4 = (df["volume"] / vol_yesterday) >= self.volume_ratio
+
+        mask = was_above & cond1 & cond2 & cond3 & cond4
+        return mask.fillna(False)
+

@@ -73,19 +73,17 @@ class LocalDB:
             if col not in df.columns:
                 df[col] = None
 
+        sql = """
+            INSERT OR REPLACE INTO daily_kline
+            (code, date, open, high, low, close, volume, amount, turn, pct_chg)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """
+
+        rows = df[required_cols].values.tolist()
         with self._get_conn() as conn:
-            # SQLite 的 INSERT OR REPLACE
-            df[required_cols].to_sql(
-                "daily_kline",
-                conn,
-                if_exists="append",
-                index=False,
-                method="multi",
-            )
-            # 处理重复：使用 upsert 语义
-            # 由于 to_sql 不支持 ON CONFLICT，我们先删除再插入
-            # 更高效的方式：使用 executemany
-        
+            conn.executemany(sql, rows)
+            conn.commit()
+
         return len(df)
 
     def upsert_kline_batch(self, df: pd.DataFrame, batch_size: int = 500) -> int:

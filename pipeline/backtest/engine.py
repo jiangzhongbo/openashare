@@ -7,10 +7,11 @@
 """
 
 import logging
+from datetime import datetime
 from typing import Dict, List, Tuple, Optional
 import pandas as pd
 
-from pipeline.factors.base import Factor, FactorResult, calculate_ma
+from pipeline.factors.base import Factor, FactorResult
 from pipeline.factors.combination import Combination
 from pipeline.factors.registry import get_combination, get_factor
 from pipeline.backtest.models import (
@@ -35,13 +36,19 @@ class BacktestEngine:
         end_date: Optional[str] = None,
         initial_capital: float = 1_000_000,
         entry_window: int = 5,
+        take_profit_pct: float = 10.0,
         combination: Optional[Combination] = None,
         factors: Optional[List[Factor]] = None,
+        max_hold_days: int = 0,
+        stop_loss_pct: float = 0,
     ):
         self.start_date = start_date
         self.end_date = end_date
         self.initial_capital = initial_capital
         self.entry_window = entry_window
+        self.take_profit_pct = take_profit_pct
+        self.max_hold_days = max_hold_days
+        self.stop_loss_pct = stop_loss_pct
 
         if combination is not None and factors is not None:
             self.combination = combination
@@ -52,7 +59,12 @@ class BacktestEngine:
             self.combination = get_combination(combination_id)
             self.factors = [get_factor(fid) for fid in self.combination.factors]
 
-        self.strategy = EntryExitStrategy(entry_window=entry_window)
+        self.strategy = EntryExitStrategy(
+            entry_window=entry_window,
+            take_profit_pct=take_profit_pct,
+            stop_loss_pct=stop_loss_pct,
+            max_hold_days=self.max_hold_days,
+        )
 
     def run(
         self,
@@ -68,7 +80,6 @@ class BacktestEngine:
 
         # Phase 2: Prepare data
         all_dates = self._get_trading_dates(stock_data)
-        ma10_lookup = self._precompute_ma10(stock_data)
         price_lookup = self._build_price_lookup(stock_data)
 
         # Phase 3: Trade simulation
@@ -78,15 +89,22 @@ class BacktestEngine:
         nav_history: List[Tuple[str, float]] = []
 
         for date in all_dates:
-            # (a) Check exits
+            # (a) Check exits (take profit / max hold days)
             codes_to_sell = []
             for code in list(portfolio.positions.keys()):
                 if code not in price_lookup or date not in price_lookup[code]:
                     continue
                 close = price_lookup[code][date]["close"]
-                ma10 = ma10_lookup.get(code, {}).get(date)
-                if ma10 is not None and self.strategy.should_exit(close, ma10):
+                pos = portfolio.positions[code]
+                # 止盈退出
+                if self.strategy.should_exit(close, pos.entry_price):
                     codes_to_sell.append((code, close))
+                    continue
+                # 最大持仓天数退出
+                if self.max_hold_days > 0:
+                    hold = (datetime.strptime(date, "%Y-%m-%d") - datetime.strptime(pos.entry_date, "%Y-%m-%d")).days
+                    if hold >= self.max_hold_days:
+                        codes_to_sell.append((code, close))
 
             for code, price in codes_to_sell:
                 portfolio.sell(code, price, date)
@@ -172,21 +190,23 @@ class BacktestEngine:
 
             name = stock_names.get(code, "")
 
-            for T in range(self.WARMUP_DAYS - 1, len(df)):
-                date = df.iloc[T]["date"]
+            # 向量化扫描：每个因子只需调用一次 scan()
+            mask = pd.Series(True, index=df.index)
+            for factor in self.factors:
+                mask = mask & factor.scan(df)
 
-                if self.start_date and date < self.start_date:
-                    continue
-                if self.end_date and date > self.end_date:
-                    continue
+            # 只考虑 warmup 之后的行
+            mask.iloc[: self.WARMUP_DAYS - 1] = False
 
-                slice_df = df.iloc[: T + 1]
-                factor_results: Dict[str, FactorResult] = {}
-                for factor in self.factors:
-                    factor_results[factor.id] = factor.compute(slice_df)
+            # 日期过滤
+            if self.start_date:
+                mask = mask & (df["date"] >= self.start_date)
+            if self.end_date:
+                mask = mask & (df["date"] <= self.end_date)
 
-                if self.combination.evaluate(factor_results):
-                    signals.setdefault(date, []).append((code, name))
+            # 提取信号日期
+            for date in df.loc[mask, "date"]:
+                signals.setdefault(date, []).append((code, name))
 
         return signals
 
@@ -205,19 +225,6 @@ class BacktestEngine:
             dates = [d for d in dates if d <= self.end_date]
 
         return dates
-
-    def _precompute_ma10(
-        self, stock_data: Dict[str, pd.DataFrame],
-    ) -> Dict[str, Dict[str, float]]:
-        ma10_lookup: Dict[str, Dict[str, float]] = {}
-        for code, df in stock_data.items():
-            df = df.sort_values("date").reset_index(drop=True)
-            ma10 = calculate_ma(df, 10)
-            ma10_lookup[code] = {}
-            for idx, val in ma10.items():
-                if pd.notna(val):
-                    ma10_lookup[code][df.iloc[idx]["date"]] = val
-        return ma10_lookup
 
     def _build_price_lookup(
         self, stock_data: Dict[str, pd.DataFrame],
