@@ -56,6 +56,7 @@ export default {
               entry_rule: row.entry_rule,
               exit_rule: row.exit_rule,
               factors: JSON.parse(row.factors || '[]'),
+              backtest_summary: row.backtest_summary ? JSON.parse(row.backtest_summary) : null,
             }));
             return jsonResponse({ combinations });
           }
@@ -72,6 +73,7 @@ export default {
             entry_rule: '信号日出现阴线时买入（5天入场窗口）。条件：跌破MA60后反弹涨幅≥5%、量比5d≥1.5、换手率5~12%、跌破天数≤5天、MA60近10日持续上升',
             exit_rule: '止盈：涨幅达10%卖出 | 最大持仓：15个交易日强制卖出',
             factors: ['ma60_bounce_volume', 'ma60_recent_uptrend', 'signal_quality_filter'],
+            backtest_summary: null,
           },
         ];
         return jsonResponse({ combinations });
@@ -211,8 +213,8 @@ export default {
             const c = combo as Record<string, unknown>;
             const n = (v: unknown) => (v === undefined ? null : v);
             await env.DB.prepare(`
-              INSERT OR REPLACE INTO combinations (id, label, description, entry_rule, exit_rule, factors, updated_at)
-              VALUES (?, ?, ?, ?, ?, ?, ?)
+              INSERT OR REPLACE INTO combinations (id, label, description, entry_rule, exit_rule, factors, backtest_summary, updated_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             `).bind(
               n(c.id),
               n(c.label),
@@ -220,6 +222,7 @@ export default {
               n(c.entry_rule),
               n(c.exit_rule),
               JSON.stringify(c.factors || []),
+              c.backtest_summary ? JSON.stringify(c.backtest_summary) : null,
               new Date().toISOString()
             ).run();
           }

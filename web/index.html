@@ -91,6 +91,42 @@
       margin-left: 10px;
     }
     
+    /* 回测绩效卡片 */
+    .backtest-card {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      padding: 16px 20px;
+      background: #fafbfc;
+      border-bottom: 1px solid #e0e0e0;
+    }
+    .backtest-card .metric {
+      text-align: center;
+      padding: 10px 8px;
+      background: white;
+      border-radius: 8px;
+      border: 1px solid #eee;
+    }
+    .backtest-card .metric .label {
+      font-size: 0.8rem;
+      color: #888;
+      margin-bottom: 4px;
+    }
+    .backtest-card .metric .val {
+      font-size: 1.15rem;
+      font-weight: 700;
+      font-family: "SF Mono", Monaco, Consolas, monospace;
+    }
+    .backtest-card .metric .val.pos { color: #c62828; }
+    .backtest-card .metric .val.neg { color: #2e7d32; }
+    .backtest-card .metric .val.neutral { color: #333; }
+    .backtest-card .meta {
+      grid-column: 1 / -1;
+      text-align: center;
+      font-size: 0.75rem;
+      color: #aaa;
+    }
+
     .table-container { overflow-x: auto; }
     table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
     th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #eee; }
@@ -275,6 +311,9 @@
       .history-stat {
         font-size: 0.85rem;
       }
+      .backtest-card {
+        grid-template-columns: repeat(2, 1fr);
+      }
       /* 表格 - 移动端优化 */
       .table-container {
         overflow-x: auto;
@@ -413,6 +452,7 @@
             ${combo.entry_rule ? `<p class="description" style="margin-top:6px;"><strong style="color:#c62828;">买入点：</strong>${combo.entry_rule}</p>` : ''}
             ${combo.exit_rule ? `<p class="description" style="margin-top:4px;"><strong style="color:#2e7d32;">卖出点：</strong>${combo.exit_rule}</p>` : ''}
           </div>
+          <div id="backtest-${combo.id}"></div>
           <div class="table-container">
             <div class="loading" id="loading-${combo.id}">加载中...</div>
             <table id="table-${combo.id}" style="display:none;">
@@ -437,6 +477,52 @@
       document.querySelectorAll('.tab-content').forEach(content => {
         content.classList.toggle('active', content.id === `content-${combinationId}`);
       });
+    }
+
+    // 渲染回测绩效卡片
+    function renderBacktestCard(combo) {
+      const container = document.getElementById(`backtest-${combo.id}`);
+      const s = combo.backtest_summary;
+      if (!s) { container.innerHTML = ''; return; }
+
+      function fmtPct(v) {
+        if (v === null || v === undefined) return '-';
+        return parseFloat(v).toFixed(2) + '%';
+      }
+      function cls(v) {
+        if (v === null || v === undefined) return 'neutral';
+        return parseFloat(v) > 0 ? 'pos' : parseFloat(v) < 0 ? 'neg' : 'neutral';
+      }
+
+      container.innerHTML = `
+        <div class="backtest-card">
+          <div class="metric">
+            <div class="label">总收益率</div>
+            <div class="val ${cls(s.total_return_pct)}">${fmtPct(s.total_return_pct)}</div>
+          </div>
+          <div class="metric">
+            <div class="label">年化收益率</div>
+            <div class="val ${cls(s.annualized_return_pct)}">${fmtPct(s.annualized_return_pct)}</div>
+          </div>
+          <div class="metric">
+            <div class="label">最大回撤</div>
+            <div class="val neg">${fmtPct(s.max_drawdown_pct)}</div>
+          </div>
+          <div class="metric">
+            <div class="label">胜率</div>
+            <div class="val neutral">${fmtPct(s.win_rate_pct)}</div>
+          </div>
+          <div class="metric">
+            <div class="label">盈亏比</div>
+            <div class="val neutral">${s.profit_loss_ratio != null ? parseFloat(s.profit_loss_ratio).toFixed(2) : '-'}</div>
+          </div>
+          <div class="metric">
+            <div class="label">交易笔数</div>
+            <div class="val neutral">${s.total_trades != null ? s.total_trades : '-'}</div>
+          </div>
+          <div class="meta">回测区间 ${s.start_date || '-'} ~ ${s.end_date || '-'}${s.updated_at ? '  更新于 ' + s.updated_at : ''}</div>
+        </div>
+      `;
     }
 
     // 渲染表格
@@ -687,7 +773,10 @@
         renderTabs();
         renderTabContents();
 
-        // 3. 设置第一个 Tab 为激活状态
+        // 3. 渲染回测绩效卡片
+        combinations.forEach(combo => renderBacktestCard(combo));
+
+        // 4. 设置第一个 Tab 为激活状态
         activeTab = combinations[0].id;
 
         // 4. 加载所有组合的数据

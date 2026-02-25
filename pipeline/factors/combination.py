@@ -6,7 +6,7 @@ Combination 是因子 ID 的有序集合。
 """
 
 from dataclasses import dataclass, field
-from typing import List, Dict, TYPE_CHECKING
+from typing import List, Dict, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .base import Factor, FactorResult
@@ -22,10 +22,11 @@ class Combination:
     entry_rule: str = ""  # 买入点描述
     exit_rule: str = ""  # 卖出点描述
     factors: List[str] = field(default_factory=list)  # 因子 ID 列表
-    
+    backtest_summary: Optional[Dict] = None  # 回测绩效摘要
+
     def to_dict(self) -> Dict[str, object]:
         """序列化为前端需要的格式"""
-        return {
+        d = {
             "id": self.id,
             "label": self.label,
             "description": self.description,
@@ -33,6 +34,9 @@ class Combination:
             "exit_rule": self.exit_rule,
             "factors": self.factors,
         }
+        if self.backtest_summary is not None:
+            d["backtest_summary"] = self.backtest_summary
+        return d
 
     def evaluate(self, factor_results: Dict[str, "FactorResult"]) -> bool:
         """

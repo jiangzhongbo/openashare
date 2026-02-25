@@ -30,6 +30,7 @@ from pipeline.data.local_db import LocalDB
 from pipeline.factors.registry import get_all_factors, get_all_combinations
 from pipeline.screening.screener import Screener
 from pipeline.sync.worker_client import WorkerClient
+from pipeline.backtest.engine import BacktestEngine
 
 # 配置日志
 logging.basicConfig(
@@ -198,6 +199,33 @@ def main():
         logger.info(f"筛选完成: 共 {report.total_stocks} 只，通过 {len(report.results)} 只")
         for combo_id, count in report.combination_counts.items():
             logger.info(f"  - {combo_id}: {count} 只")
+
+        # 5b. 回测各组合，附加绩效摘要
+        logger.info("运行组合回测...")
+        for combo in combinations:
+            try:
+                engine = BacktestEngine(
+                    combination=combo,
+                    factors=[screener.factor_map[fid] for fid in combo.factors],
+                    initial_capital=1_000_000,
+                    entry_window=5,
+                    take_profit_pct=10.0,
+                    max_hold_days=15,
+                )
+                bt_result = engine.run(stock_data, stock_names=stock_names)
+                combo.backtest_summary = {
+                    **bt_result.metrics,
+                    "start_date": bt_result.start_date,
+                    "end_date": bt_result.end_date,
+                    "updated_at": run_date,
+                }
+                logger.info(
+                    f"  回测 {combo.id}: 总收益={bt_result.metrics.get('total_return_pct', '-')}%  "
+                    f"胜率={bt_result.metrics.get('win_rate_pct', '-')}%  "
+                    f"交易={bt_result.metrics.get('total_trades', 0)}笔"
+                )
+            except Exception as e:
+                logger.warning(f"  回测 {combo.id} 失败（不影响筛选）: {e}")
 
         # 6. 上传结果
         if args.dry_run:
