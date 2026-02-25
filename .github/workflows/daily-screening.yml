@@ -76,10 +76,13 @@ jobs:
           restore-keys: |
             kline-db-
 
-      # 如果没有缓存，从 Release 下载初始数据
+      # 如果缓存未恢复 db 文件，从 Release 下载初始数据
       - name: Download initial database from Release
-        if: steps.cache-db.outputs.cache-hit != 'true'
         run: |
+          if [ -f pipeline/data/kline.db ]; then
+            echo "kline.db 已从缓存恢复 ($(ls -lh pipeline/data/kline.db | awk '{print $5}'))，跳过下载"
+            exit 0
+          fi
           mkdir -p pipeline/data
           # 尝试从最新 release 下载 kline.db
           DOWNLOAD_URL=$(curl -s https://api.github.com/repos/${{ github.repository }}/releases/latest | grep "browser_download_url.*kline.db" | cut -d '"' -f 4)
